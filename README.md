@@ -24,3 +24,4 @@
 ### Полезные ссылки:
 Инструкция по использованию: https://youtu.be/XoOSVzyYM-0
 
+Справка API: https://www.comagic.ru/support/api/data-api/
