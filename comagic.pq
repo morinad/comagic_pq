@@ -10,6 +10,13 @@ FuncType = type function (
         Documentation.FieldDescription = "Type ""calls"" is available now.",
         Documentation.AllowedValues = { "calls", "chats", "goals", "offline","all","sessions" }
     ]),
+    
+     token  as (type text meta [
+        Documentation.FieldCaption = "Token:",
+        Documentation.FieldDescription = "Enter your Comagic token.",
+        Documentation.SampleValues = {"dgbg8Ngklkne0nnrbvbq81vvap"}
+    ]),
+
     start as (type text meta [
         Documentation.FieldCaption = "Start date:",
         Documentation.FieldDescription = "Enter the first date of your statistics. You can specify date in YYYY-MM-DD format or use dynamic formats: today, yesterday, 69daysAgo.",
@@ -27,12 +34,12 @@ FuncType = type function (
         Documentation.Examples = {
         [
             Description = "Returns a list of records from your CoMagic table",
-            Code = "CoMagic.Data(""12345"",""2020-02-20"",""yesterday"")",
+            Code = "CoMagic.Data(""12345"",""dgbg8Ngklkne0nnrbvbq81vvap"",""2020-02-20"",""yesterday"")",
             Result = "{[Record1],[Record2],[Record3],...}"
         ],
         [
             Description = "Returns a list of records from your CoMagic table",
-            Code = "CoMagic.Data(""54321"",""69daysAgo"",""today"")",
+            Code = "CoMagic.Data(""54321"",""dgbg8Ngklkne0nnrbvbq81vvap"",""69daysAgo"",""today"")",
             Result = "{[Record1],[Record2],[Record3],...}"
         ]
         }
@@ -40,7 +47,7 @@ FuncType = type function (
 
 
 
-CoMagic.Func =( reportType as text, start as text, end as text)=>
+CoMagic.Func =( reportType as text, token as text, start as text, end as text)=>
 let
 
     fields = 
@@ -61,7 +68,7 @@ let
     
     source = Table.Join(dateTable(dateFunc(start),dateFunc(end),0),"month0",dateTable(dateFunc(start),dateFunc(end),1),"month1"),
     removeMonth = Table.RemoveColumns(source,{"month0", "month1"}),
-    callSum = Table.AddColumn(removeMonth, "sum", each getSum([text0],[text1],method)),
+    callSum = Table.AddColumn(removeMonth, "sum", each getSum([text0],[text1],method,token)),
     errorMessages = callSum[sum],
     calc =  if (try List.Sum(errorMessages) otherwise 0) >0 then 
 
@@ -73,7 +80,7 @@ let
         expandOffsets = Table.ExpandListColumn(offsets, "off"),
         offsetType = Table.TransformColumnTypes(expandOffsets, {{"off", Int64.Type}}),
         offsetMultiply = Table.TransformColumns(offsetType, {{"off", each _ * 5000, type number}}),
-        addData = Table.AddColumn(offsetMultiply, "data", (x)=>  getCoMagic(fields,x[off],x[text0],x[text1],method)),
+        addData = Table.AddColumn(offsetMultiply, "data", (x)=>  getCoMagic(fields,x[off],x[text0],x[text1],method,token)),
         removeHelp = Table.RemoveColumns(addData,{"off", "text1", "text0", "sum"}),
         expandData = Table.ExpandTableColumn(removeHelp, "data", fields, fields),
         tagContent = Table.AddColumn(expandData, "tag_names_from_tags", (x)=> List.RemoveNulls ({
@@ -131,11 +138,11 @@ in textType;
 
 
 
-getCoMagic=(fields,off,date1,date2,met)=> 
+getCoMagic=(fields,off,date1,date2,met,token)=> 
 let
     data = Json.FromValue([jsonrpc="2.0",id=Number.From(Text.From(Number.From(Date.From(date1)))&Text.From(Number.From(Date.From(date2)))&"1"&Text.From(Time.Hour(DateTime.LocalNow()))),
     method=met,
-    params=[access_token=Extension.CurrentCredential()[Key], date_from= date1 & " 00:00:00", date_till=date2 & " 23:59:59",limit=5000,offset=off,
+    params=[access_token=token, date_from= date1 & " 00:00:00", date_till=date2 & " 23:59:59",limit=5000,offset=off,
     fields=fields]]),
     web = Function.InvokeAfter(()=> Web.Contents("https://dataapi.CoMagic.ru/v2.0", [ Content = data, ManualStatusHandling = {404, 400}]),#duration(0,0,0,0.4) ),
     json= Json.Document(web),
@@ -146,11 +153,11 @@ in expand;
 
 
 
-getSum=(date1,date2,met)=>
+getSum=(date1,date2,met,token)=>
 let
     data = Json.FromValue([jsonrpc="2.0",id=Number.From(Text.From(Number.From(Date.From(date1)))&Text.From(Number.From(Date.From(date2)))&"0"&Text.From(Time.Hour(DateTime.LocalNow())) ),
     method=met,
-    params=[access_token=Extension.CurrentCredential()[Key],date_from=date1&" 00:00:00",date_till=date2&" 23:59:59",limit=5000,offset=0,fields={"id"}]]),
+    params=[access_token=token,date_from=date1&" 00:00:00",date_till=date2&" 23:59:59",limit=5000,offset=0,fields={"id"}]]),
     web = Web.Contents("https://dataapi.CoMagic.ru/v2.0", [ Content = data,  ManualStatusHandling = {404, 400}]),
     json = Json.Document(web),
     result = json[result]?[metadata]?[total_items]?
@@ -158,10 +165,10 @@ in if result =null then json[error][message] else result;
 
 
 CoMagic = [
-    TestConnection = (dataSourcePath) => { "CoMagic.Data", Json.Document(dataSourcePath)[reportType],Json.Document(dataSourcePath)[start],Json.Document(dataSourcePath)[end]},
+    TestConnection = (dataSourcePath) => { "CoMagic.Data", Json.Document(dataSourcePath)[reportType],Json.Document(dataSourcePath)[token],Json.Document(dataSourcePath)[start],Json.Document(dataSourcePath)[end]},
     Authentication = [
         
-         Key = []
+         Implicit = []
    
     ],
     Label = "CoMagic Connection"
